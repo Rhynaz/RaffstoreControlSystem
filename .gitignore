@@ -1,0 +1,32 @@
+# Visual Studio Code
+/.vscode/**
+
+# ESP-IDF
+/build/**
+/partition_table/
+/sdkconfig
+/sdkconfig.old
+/debug.log
+
+# Secrets
+/software/config/include/config/secrets.h
+
+# KiCad
+/hardware/*.kicad_prl
+/hardware/fp-info-cache
+
+## KiCad Backups
+/hardware/*-backups/
+/hardware/*.bak
+
+## KiCad Autosaves
+/hardware/#auto_saved_files#
+/hardware/_autosave-*
+
+## KiCad Output
+/hardware/*output*
+/hardware/*.zip
+/hardware/*.net
+/hardware/*.xml
+/hardware/*.csv
+/hardware/*.log

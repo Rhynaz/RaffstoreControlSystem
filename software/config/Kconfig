@@ -1,0 +1,19 @@
+menu "Raffstore Control System"
+    choice
+        bool "Active configuration profile"
+        default RCS_ACTIVE_PROFILE_DEFAULT
+
+        config RCS_ACTIVE_PROFILE_DEFAULT
+            bool "Default"
+        config RCS_ACTIVE_PROFILE_RCSEG
+            bool "RCS-EG"
+        config RCS_ACTIVE_PROFILE_RCSOG
+            bool "RCS-OG"
+    endchoice
+
+    config RCS_ACTIVE_PROFILE
+        string
+        default "config/profiles/default.h" if RCS_ACTIVE_PROFILE_DEFAULT
+        default "config/profiles/rcseg.h" if RCS_ACTIVE_PROFILE_RCSEG
+        default "config/profiles/rcsog.h" if RCS_ACTIVE_PROFILE_RCSOG
+endmenu

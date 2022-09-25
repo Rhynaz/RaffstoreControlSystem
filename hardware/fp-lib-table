@@ -1,0 +1,4 @@
+(fp_lib_table
+  (lib (name "ESP32-S3-MINI-1")(type "KiCad")(uri "${KIPRJMOD}/ESP32-S3-MINI-1")(options "")(descr ""))
+  (lib (name "0PTF0078P")(type "KiCad")(uri "${KIPRJMOD}/0PTF0078P")(options "")(descr ""))
+)

@@ -1,0 +1,49 @@
+{
+    "client": "Thunder Client",
+    "collectionName": "Raffstore Control System",
+    "dateExported": "2022-09-11T09:12:34.689Z",
+    "version": "1.1",
+    "folders": [],
+    "requests": [
+        {
+            "_id": "68bc6e09-e5ef-419a-9cfe-504c7214008d",
+            "colId": "ad030b2b-bd09-4703-8085-80bfb3fc2f06",
+            "containerId": "",
+            "name": "OTA Update (EG)",
+            "url": "http://rcseg.xinet/flash",
+            "method": "POST",
+            "sortNum": 10000,
+            "created": "2022-09-11T09:10:43.134Z",
+            "modified": "2022-09-11T09:10:43.134Z",
+            "headers": [],
+            "params": [],
+            "body": {
+                "type": "binary",
+                "raw": "",
+                "form": [],
+                "binary": "./build/RaffstoreControlSystem.bin"
+            },
+            "tests": []
+        },
+        {
+            "_id": "cdd0bcd4-ed01-4f0c-8417-33879917c0b0",
+            "colId": "ad030b2b-bd09-4703-8085-80bfb3fc2f06",
+            "containerId": "",
+            "name": "OTA Update (OG)",
+            "url": "http://rcsog.xinet/flash",
+            "method": "POST",
+            "sortNum": 20000,
+            "created": "2022-09-11T09:12:02.541Z",
+            "modified": "2022-09-11T09:12:02.541Z",
+            "headers": [],
+            "params": [],
+            "body": {
+                "type": "binary",
+                "raw": "",
+                "form": [],
+                "binary": "./build/RaffstoreControlSystem.bin"
+            },
+            "tests": []
+        }
+    ]
+}
