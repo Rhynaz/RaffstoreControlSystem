@@ -1,8 +1,8 @@
 # Visual Studio Code
-/.vscode/**
+/.vscode/
 
 # ESP-IDF
-/build/**
+/build/
 /partition_table/
 /sdkconfig
 /sdkconfig.old

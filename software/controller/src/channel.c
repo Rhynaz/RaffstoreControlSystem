@@ -1,5 +1,7 @@
 #include "controller/channel.h"
 
+#include "controller.h"
+
 #include "config.h"
 
 #include "esp_log.h"
@@ -16,13 +18,11 @@ static const char *const TAG = "Controller : Channel  ";
 static void motor_open_handler(void *, esp_event_base_t, int32_t, void *);
 static void motor_close_handler(void *, esp_event_base_t, int32_t, void *);
 static void motor_stop_handler(void *, esp_event_base_t, int32_t, void *);
-static inline void motor_stop_if_moving(channel_t *);
+static inline void motor_stop_if_moving(channel_t *, uint8_t);
 static inline void motor_change_direction(channel_t *, uint8_t);
 
 static void poll_task_handler(void *);
-static void switch_poll_up(channel_t *);
-static void switch_poll_down(channel_t *);
-static inline void switch_send_event(channel_t *, channel_event_t);
+static inline void switch_poll(channel_t *, uint8_t, gpio_num_t, uint8_t, gpio_num_t, uint8_t);
 
 static void stop_timer_handler(TimerHandle_t);
 
@@ -68,9 +68,9 @@ static void motor_open_handler(void *arg, esp_event_base_t base, int32_t id, voi
     ESP_LOGI(TAG, "%u : Opening...", channel->index);
     xTimerReset(channel->stop_timer, 0);
 
-    motor_stop_if_moving(channel);
-    motor_change_direction(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_OFF != channel->motor_invert);
-    gpio_set_level(channel->motor_enable, CONFIG_CHANNEL_MOTOR_ENABLE_ON);
+    motor_stop_if_moving(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE == channel->motor_invert);
+    motor_change_direction(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE == channel->motor_invert);
+    gpio_set_level(channel->motor_enable, CONFIG_CHANNEL_MOTOR_ENABLE_ACTIVE);
 }
 
 static void motor_close_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
@@ -80,9 +80,9 @@ static void motor_close_handler(void *arg, esp_event_base_t base, int32_t id, vo
     ESP_LOGI(TAG, "%u : Closing...", channel->index);
     xTimerReset(channel->stop_timer, 0);
 
-    motor_stop_if_moving(channel);
-    motor_change_direction(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ON != channel->motor_invert);
-    gpio_set_level(channel->motor_enable, CONFIG_CHANNEL_MOTOR_ENABLE_ON);
+    motor_stop_if_moving(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE != channel->motor_invert);
+    motor_change_direction(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE != channel->motor_invert);
+    gpio_set_level(channel->motor_enable, CONFIG_CHANNEL_MOTOR_ENABLE_ACTIVE);
 }
 
 static void motor_stop_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
@@ -92,16 +92,17 @@ static void motor_stop_handler(void *arg, esp_event_base_t base, int32_t id, voi
     ESP_LOGI(TAG, "%u : Stopped!", channel->index);
     xTimerStop(channel->stop_timer, 0);
 
-    gpio_set_level(channel->motor_enable, CONFIG_CHANNEL_MOTOR_ENABLE_OFF);
-    motor_change_direction(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_OFF);
+    gpio_set_level(channel->motor_enable, !CONFIG_CHANNEL_MOTOR_ENABLE_ACTIVE);
+    motor_change_direction(channel, !CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE);
 }
 
-static inline void motor_stop_if_moving(channel_t *channel)
+static inline void motor_stop_if_moving(channel_t *channel, uint8_t direction)
 {
-    if (gpio_get_level(channel->motor_enable) == CONFIG_CHANNEL_MOTOR_ENABLE_OFF)
+    if (gpio_get_level(channel->motor_enable) != CONFIG_CHANNEL_MOTOR_ENABLE_ACTIVE ||
+        gpio_get_level(channel->motor_direction) == direction)
         return;
 
-    gpio_set_level(channel->motor_enable, CONFIG_CHANNEL_MOTOR_ENABLE_OFF);
+    gpio_set_level(channel->motor_enable, !CONFIG_CHANNEL_MOTOR_ENABLE_ACTIVE);
     vTaskDelay(CONFIG_CHANNEL_MOTOR_REVERSING_DELAY_MS / portTICK_PERIOD_MS);
 }
 
@@ -116,92 +117,104 @@ static void poll_task_handler(void *arg)
 {
     channel_t *channel = (channel_t *)arg;
 
+    gpio_num_t switch_up = channel->switch_up;
+    gpio_num_t switch_down = channel->switch_down;
+
+    uint8_t switch_up_active = CONFIG_CHANNEL_SWITCH_UP_ACTIVE;
+    uint8_t switch_down_active = CONFIG_CHANNEL_SWITCH_DOWN_ACTIVE;
+
+    if (channel->switch_invert)
+    {
+        switch_up = channel->switch_down;
+        switch_down = channel->switch_up;
+
+        switch_up_active = CONFIG_CHANNEL_SWITCH_DOWN_ACTIVE;
+        switch_down_active = CONFIG_CHANNEL_SWITCH_UP_ACTIVE;
+    }
+
     ESP_LOGI(TAG, "%u : Start polling.", channel->index);
     while (1)
     {
-        switch_poll_up(channel);
-        switch_poll_down(channel);
+        switch_poll(channel, 1, switch_up, switch_up_active, switch_down, switch_down_active);
+        vTaskDelay(CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS / portTICK_PERIOD_MS);
 
+        switch_poll(channel, 0, switch_down, switch_down_active, switch_up, switch_up_active);
         vTaskDelay(CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS / portTICK_PERIOD_MS);
     }
 }
 
-static void switch_poll_up(channel_t *channel)
+static inline void switch_poll(channel_t *channel, uint8_t direction,
+                               gpio_num_t primary_switch, uint8_t primary_switch_active,
+                               gpio_num_t secondary_switch, uint8_t secondary_switch_active)
 {
-    if (gpio_get_level(channel->switch_up) == CONFIG_CHANNEL_SWITCH_UP_OFF)
+    if (gpio_get_level(primary_switch) != primary_switch_active)
         return;
 
-    ESP_LOGI(TAG, "%u : Switch UP pressed.", channel->index);
-    switch_send_event(channel, CHANNEL_EVENT_OPEN);
+    ESP_LOGI(TAG, "%u : %s : Switch pressed.", channel->index, direction ? " Up " : "Down");
+
+    if (direction)
+        controller_open(channel->index);
+    else
+        controller_close(channel->index);
+
     vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
 
-    if (gpio_get_level(channel->switch_up) == CONFIG_CHANNEL_SWITCH_UP_ON) // Holding
+    if (gpio_get_level(primary_switch) == primary_switch_active)
     {
-        ESP_LOGI(TAG, "%u : Switch UP held.", channel->index);
-        while (gpio_get_level(channel->switch_up) == CONFIG_CHANNEL_SWITCH_UP_ON)
+        ESP_LOGI(TAG, "%u : %s : Switch held.", channel->index, direction ? " Up " : "Down");
+
+        while (gpio_get_level(primary_switch) == primary_switch_active)
             vTaskDelay(CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS / portTICK_PERIOD_MS);
 
-        ESP_LOGI(TAG, "%u : Switch UP hold released.", channel->index);
-        switch_send_event(channel, CHANNEL_EVENT_STOP);
+        ESP_LOGI(TAG, "%u : %s : Switch hold released.", channel->index, direction ? " Up " : "Down");
+
+        controller_stop(channel->index);
         return;
     }
 
-    ESP_LOGI(TAG, "%u : Switch UP released.", channel->index);
-    for (uint32_t delay_count = 1; gpio_get_level(channel->switch_up) == CONFIG_CHANNEL_SWITCH_UP_OFF; delay_count++)
+    ESP_LOGI(TAG, "%u : %s : Switch released.", channel->index, direction ? " Up " : "Down");
+
+    uint32_t delay_count = 0;
+    uint8_t double_clicked = 0;
+    while (1)
     {
+        if (gpio_get_level(primary_switch) == primary_switch_active)
+        {
+            if (double_clicked || delay_count * CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS >= CONFIG_CHANNEL_SWITCH_CLICK_DELAY_MS)
+                break;
+
+            ESP_LOGI(TAG, "%u : %s : Switch double clicked.", channel->index, direction ? " Up " : "Down");
+
+            double_clicked = 1;
+            delay_count = 0;
+
+            if (direction)
+                controller_open_all();
+            else
+                controller_close_all();
+
+            vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        if (gpio_get_level(secondary_switch) == secondary_switch_active)
+            break;
+
         vTaskDelay(CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS / portTICK_PERIOD_MS);
-        if (delay_count * CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS > channel->stop_timeout_sec * 1000)
+        if (++delay_count * CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS >= channel->stop_timeout_sec * 1000)
             return;
     }
 
-    ESP_LOGI(TAG, "%u : Switch UP pressed again.", channel->index);
-    switch_send_event(channel, CHANNEL_EVENT_STOP);
-    vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
-    ESP_LOGI(TAG, "%u : Switch UP released again.", channel->index);
-}
+    ESP_LOGI(TAG, "%u : %s : Switch pressed again.", channel->index, direction ? " Up " : "Down");
 
-static void switch_poll_down(channel_t *channel)
-{
-    if (gpio_get_level(channel->switch_down) == CONFIG_CHANNEL_SWITCH_DOWN_OFF)
-        return;
+    if (double_clicked)
+        controller_stop_all();
+    else
+        controller_stop(channel->index);
 
-    ESP_LOGI(TAG, "%u : Switch DOWN pressed.", channel->index);
-    switch_send_event(channel, CHANNEL_EVENT_CLOSE);
     vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
 
-    if (gpio_get_level(channel->switch_down) == CONFIG_CHANNEL_SWITCH_DOWN_ON) // Holding
-    {
-        ESP_LOGI(TAG, "%u : Switch DOWN held.", channel->index);
-        while (gpio_get_level(channel->switch_down) == CONFIG_CHANNEL_SWITCH_DOWN_ON)
-            vTaskDelay(CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS / portTICK_PERIOD_MS);
-
-        ESP_LOGI(TAG, "%u : Switch DOWN hold released.", channel->index);
-        switch_send_event(channel, CHANNEL_EVENT_STOP);
-        return;
-    }
-
-    ESP_LOGI(TAG, "%u : Switch DOWN released.", channel->index);
-    for (uint32_t delay_count = 1; gpio_get_level(channel->switch_down) == CONFIG_CHANNEL_SWITCH_DOWN_OFF; delay_count++)
-    {
-        vTaskDelay(CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS / portTICK_PERIOD_MS);
-        if (delay_count * CONFIG_CHANNEL_SWITCH_POLLING_DELAY_MS > channel->stop_timeout_sec * 1000)
-            return;
-    }
-
-    ESP_LOGI(TAG, "%u : Switch DOWN pressed again.", channel->index);
-    switch_send_event(channel, CHANNEL_EVENT_STOP);
-    vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
-    ESP_LOGI(TAG, "%u : Switch DOWN released again.", channel->index);
-}
-
-static inline void switch_send_event(channel_t *channel, channel_event_t evt)
-{
-    if (channel->switch_invert && evt == CHANNEL_EVENT_OPEN)
-        evt = CHANNEL_EVENT_CLOSE;
-    else if (channel->switch_invert && evt == CHANNEL_EVENT_CLOSE)
-        evt = CHANNEL_EVENT_OPEN;
-
-    esp_event_post_to(channel->event_loop, CHANNEL_EVENT, evt, NULL, 0, 0);
+    ESP_LOGI(TAG, "%u : %s : Switch released again.", channel->index, direction ? " Up " : "Down");
 }
 
 static void stop_timer_handler(TimerHandle_t timer)
