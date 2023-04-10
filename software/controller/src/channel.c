@@ -30,7 +30,7 @@ void channel_init(channel_t *channel)
 {
     ESP_LOGI(TAG, "%u : Create event loop.", channel->index);
     char loop_name[16];
-    sprintf(loop_name, "channel%u_evts", channel->index);
+    snprintf(loop_name, 16, "channel%u_evts", channel->index);
 
     esp_event_loop_args_t event_loop_config = {
         .task_name = loop_name,
@@ -48,7 +48,7 @@ void channel_init(channel_t *channel)
 
     ESP_LOGI(TAG, "%u : Create poll task.", channel->index);
     char task_name[16];
-    sprintf(task_name, "channel%u_task", channel->index);
+    snprintf(task_name, 16, "channel%u_task", channel->index);
 
     BaseType_t err = xTaskCreate(&poll_task_handler, task_name, CONFIG_CHANNEL_POLL_STACK_SIZE, channel, CONFIG_CHANNEL_POLL_TASK_PRIORITY, &channel->poll_task);
     if (err != pdPASS)
@@ -56,9 +56,11 @@ void channel_init(channel_t *channel)
 
     ESP_LOGI(TAG, "%u : Create stop timer.", channel->index);
     char timer_name[16];
-    sprintf(timer_name, "channel%u_timr", channel->index);
+    snprintf(timer_name, 16, "channel%u_timr", channel->index);
 
     channel->stop_timer = xTimerCreate(timer_name, channel->stop_timeout_sec * 1000 / portTICK_PERIOD_MS, pdFALSE, channel, &stop_timer_handler);
+
+    channel->last_user_event = CHANNEL_EVENT_STOP;
 }
 
 static void motor_open_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
@@ -67,6 +69,9 @@ static void motor_open_handler(void *arg, esp_event_base_t base, int32_t id, voi
 
     ESP_LOGI(TAG, "%u : Opening...", channel->index);
     xTimerReset(channel->stop_timer, 0);
+
+    if (*(bool *)data)
+        channel->last_user_event = CHANNEL_EVENT_OPEN;
 
     motor_stop_if_moving(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE == channel->motor_invert);
     motor_change_direction(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE == channel->motor_invert);
@@ -80,6 +85,9 @@ static void motor_close_handler(void *arg, esp_event_base_t base, int32_t id, vo
     ESP_LOGI(TAG, "%u : Closing...", channel->index);
     xTimerReset(channel->stop_timer, 0);
 
+    if (*(bool *)data)
+        channel->last_user_event = CHANNEL_EVENT_CLOSE;
+
     motor_stop_if_moving(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE != channel->motor_invert);
     motor_change_direction(channel, CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE != channel->motor_invert);
     gpio_set_level(channel->motor_enable, CONFIG_CHANNEL_MOTOR_ENABLE_ACTIVE);
@@ -91,6 +99,9 @@ static void motor_stop_handler(void *arg, esp_event_base_t base, int32_t id, voi
 
     ESP_LOGI(TAG, "%u : Stopped!", channel->index);
     xTimerStop(channel->stop_timer, 0);
+
+    if (*(bool *)data)
+        channel->last_user_event = CHANNEL_EVENT_STOP;
 
     gpio_set_level(channel->motor_enable, !CONFIG_CHANNEL_MOTOR_ENABLE_ACTIVE);
     motor_change_direction(channel, !CONFIG_CHANNEL_MOTOR_DIRECTION_ACTIVE);
@@ -153,9 +164,9 @@ static inline void switch_poll(channel_t *channel, uint8_t direction,
     ESP_LOGI(TAG, "%u : %s : Switch pressed.", channel->index, direction ? " Up " : "Down");
 
     if (direction)
-        controller_open(channel->index);
+        controller_open(channel->index, true);
     else
-        controller_close(channel->index);
+        controller_close(channel->index, true);
 
     vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
 
@@ -168,7 +179,7 @@ static inline void switch_poll(channel_t *channel, uint8_t direction,
 
         ESP_LOGI(TAG, "%u : %s : Switch hold released.", channel->index, direction ? " Up " : "Down");
 
-        controller_stop(channel->index);
+        controller_stop(channel->index, true);
         return;
     }
 
@@ -189,9 +200,9 @@ static inline void switch_poll(channel_t *channel, uint8_t direction,
             delay_count = 0;
 
             if (direction)
-                controller_open_all();
+                controller_open_all(true);
             else
-                controller_close_all();
+                controller_close_all(true);
 
             vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
             continue;
@@ -208,9 +219,9 @@ static inline void switch_poll(channel_t *channel, uint8_t direction,
     ESP_LOGI(TAG, "%u : %s : Switch pressed again.", channel->index, direction ? " Up " : "Down");
 
     if (double_clicked)
-        controller_stop_all();
+        controller_stop_all(true);
     else
-        controller_stop(channel->index);
+        controller_stop(channel->index, true);
 
     vTaskDelay(CONFIG_CHANNEL_SWITCH_HOLD_DELAY_MS / portTICK_PERIOD_MS);
 
@@ -223,5 +234,5 @@ static void stop_timer_handler(TimerHandle_t timer)
 
     channel_t *channel = (channel_t *)pvTimerGetTimerID(timer);
     ESP_LOGI(TAG, "%u : Stop timeout reached.", channel->index);
-    esp_event_post_to(channel->event_loop, CHANNEL_EVENT, CHANNEL_EVENT_STOP, NULL, 0, 0);
+    controller_stop(channel->index, false);
 }

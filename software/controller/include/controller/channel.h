@@ -30,6 +30,8 @@ typedef struct channel
     esp_event_loop_handle_t event_loop;
     TaskHandle_t poll_task;
     TimerHandle_t stop_timer;
+
+    channel_event_t last_user_event;
 } channel_t;
 
 void channel_init(channel_t *channel);

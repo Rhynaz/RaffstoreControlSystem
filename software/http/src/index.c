@@ -5,7 +5,15 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 
-static const char *const TAG = "HTTP       :  Index   ";
+#define INDEX_DEFINE_CHANNEL(num) "\
+        <form method='post'>\
+            <label style='line-height:1.5'>Channel " #num ":</label>\
+            <input type='submit' value='Open' formaction='/actions/open/" #num "' />\
+            <input type='submit' value='Close' formaction='/actions/close/" #num "' />\
+            <input type='submit' value='Stop' formaction='/actions/stop/" #num "' />\
+        </form>"
+
+static const char *const TAG = "HTTP       : Index    ";
 
 // clang-format off
 static const char *const INDEX_BODY = "\

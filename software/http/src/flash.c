@@ -8,7 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static const char *const TAG = "HTTP       :  Flash    ";
+static const char *const TAG = "HTTP       : Flash     ";
 
 static esp_err_t post_flash_handler(httpd_req_t *);
 
@@ -30,8 +30,8 @@ static esp_err_t post_flash_handler(httpd_req_t *req)
     switch (update_prepare(remaining))
     {
     case UPDATE_ERR_IMAGE_TOO_LARGE:;
-        char msg[39];
-        sprintf(msg, "Image size must be less than %u KiB.", CONFIG_UPDATE_PARTITION_SIZE / 1024);
+        char msg[64];
+        snprintf(msg, 64, "Image size must be less than %u KiB.", CONFIG_UPDATE_PARTITION_SIZE / 1024);
         httpd_resp_set_status(req, "413 Payload Too Large");
         httpd_resp_sendstr(req, msg);
         return ESP_FAIL;
@@ -92,5 +92,7 @@ static esp_err_t post_flash_handler(httpd_req_t *req)
         break;
     }
 
+    httpd_resp_sendstr(req, "Update succeeded, rebooting.");
     update_reboot();
+    return ESP_OK;
 }

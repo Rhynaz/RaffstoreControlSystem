@@ -35,6 +35,8 @@
 
 #define CONFIG_INDEX_TITLE "RCS-EG"
 
+#define CONFIG_STATUS_URI "/status"
+
 #define CONFIG_ACTIONS_OPEN_URI "/actions/open"
 #define CONFIG_ACTIONS_CLOSE_URI "/actions/close"
 #define CONFIG_ACTIONS_STOP_URI "/actions/stop"

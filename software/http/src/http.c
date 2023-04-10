@@ -2,6 +2,7 @@
 
 #include "http/index.h"
 #include "http/actions.h"
+#include "http/status.h"
 #include "http/flash.h"
 
 #include "config.h"
@@ -53,6 +54,8 @@ void http_start()
     httpd_register_uri_handler(server_handle, &actions_open_uri_handler);
     httpd_register_uri_handler(server_handle, &actions_close_uri_handler);
     httpd_register_uri_handler(server_handle, &actions_stop_uri_handler);
+
+    httpd_register_uri_handler(server_handle, &status_uri_handler);
 
     httpd_register_uri_handler(server_handle, &flash_uri_handler);
 

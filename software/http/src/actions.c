@@ -42,7 +42,7 @@ static esp_err_t post_open_handler(httpd_req_t *req)
 
     if (!strcmp(req->uri, CONFIG_ACTIONS_OPEN_URI) || !strcmp(req->uri, CONFIG_ACTIONS_OPEN_URI "/"))
     {
-        controller_open_all();
+        controller_open_all(true);
         return redirect_to_index(req);
     }
 
@@ -52,7 +52,7 @@ static esp_err_t post_open_handler(httpd_req_t *req)
     if (err != ESP_OK)
         return err;
 
-    controller_open(channel);
+    controller_open(channel, true);
     return redirect_to_index(req);
 }
 
@@ -62,7 +62,7 @@ static esp_err_t post_close_handler(httpd_req_t *req)
 
     if (!strcmp(req->uri, CONFIG_ACTIONS_CLOSE_URI) || !strcmp(req->uri, CONFIG_ACTIONS_CLOSE_URI "/"))
     {
-        controller_close_all();
+        controller_close_all(true);
         return redirect_to_index(req);
     }
 
@@ -72,7 +72,7 @@ static esp_err_t post_close_handler(httpd_req_t *req)
     if (err != ESP_OK)
         return err;
 
-    controller_close(channel);
+    controller_close(channel, true);
     return redirect_to_index(req);
 }
 
@@ -82,7 +82,7 @@ static esp_err_t post_stop_handler(httpd_req_t *req)
 
     if (!strcmp(req->uri, CONFIG_ACTIONS_STOP_URI) || !strcmp(req->uri, CONFIG_ACTIONS_STOP_URI "/"))
     {
-        controller_stop_all();
+        controller_stop_all(true);
         return redirect_to_index(req);
     }
 
@@ -92,7 +92,7 @@ static esp_err_t post_stop_handler(httpd_req_t *req)
     if (err != ESP_OK)
         return err;
 
-    controller_stop(channel);
+    controller_stop(channel, true);
     return redirect_to_index(req);
 }
 

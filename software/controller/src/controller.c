@@ -8,6 +8,19 @@
 #include "esp_event.h"
 #include "driver/gpio.h"
 
+#define CONTROLLER_DEFINE_CHANNEL(num)                                         \
+    [CONFIG_CONTROLLER_CHANNEL##num##_INDEX] = (channel_t)                     \
+    {                                                                          \
+        .index = CONFIG_CONTROLLER_CHANNEL##num##_INDEX,                       \
+        .stop_timeout_sec = CONFIG_CONTROLLER_CHANNEL##num##_STOP_TIMEOUT_SEC, \
+        .motor_enable = CONFIG_CONTROLLER_CHANNEL##num##_MOTOR_ENABLE,         \
+        .motor_direction = CONFIG_CONTROLLER_CHANNEL##num##_MOTOR_DIRECTION,   \
+        .motor_invert = CONFIG_CONTROLLER_CHANNEL##num##_MOTOR_INVERT,         \
+        .switch_up = CONFIG_CONTROLLER_CHANNEL##num##_SWITCH_UP,               \
+        .switch_down = CONFIG_CONTROLLER_CHANNEL##num##_SWITCH_DOWN,           \
+        .switch_invert = CONFIG_CONTROLLER_CHANNEL##num##_SWITCH_INVERT,       \
+    }
+
 static const char *const TAG = "Controller ";
 
 static channel_t channels[CONFIG_CONTROLLER_CHANNEL_NUM] = {
@@ -67,7 +80,7 @@ void controller_init()
         channel_init(&channels[i]);
 }
 
-void controller_open(uint8_t channel_num)
+void controller_open(uint8_t channel_num, bool user_initiated)
 {
     if (channel_num >= CONFIG_CONTROLLER_CHANNEL_NUM)
     {
@@ -75,10 +88,20 @@ void controller_open(uint8_t channel_num)
         return;
     }
 
-    esp_event_post_to(channels[channel_num].event_loop, CHANNEL_EVENT, CHANNEL_EVENT_OPEN, NULL, 0, 0);
+    esp_event_post_to(channels[channel_num].event_loop, CHANNEL_EVENT, CHANNEL_EVENT_OPEN, &user_initiated, sizeof(user_initiated), 0);
 }
 
-void controller_close(uint8_t channel_num)
+void controller_open_all(bool user_initiated)
+{
+    ESP_LOGI(TAG, "Open all channels.");
+
+    for (uint8_t i = 0; i < CONFIG_CONTROLLER_CHANNEL_NUM; i++)
+    {
+        controller_open(i, user_initiated);
+    }
+}
+
+void controller_close(uint8_t channel_num, bool user_initiated)
 {
     if (channel_num >= CONFIG_CONTROLLER_CHANNEL_NUM)
     {
@@ -86,10 +109,20 @@ void controller_close(uint8_t channel_num)
         return;
     }
 
-    esp_event_post_to(channels[channel_num].event_loop, CHANNEL_EVENT, CHANNEL_EVENT_CLOSE, NULL, 0, 0);
+    esp_event_post_to(channels[channel_num].event_loop, CHANNEL_EVENT, CHANNEL_EVENT_CLOSE, &user_initiated, sizeof(user_initiated), 0);
 }
 
-void controller_stop(uint8_t channel_num)
+void controller_close_all(bool user_initiated)
+{
+    ESP_LOGI(TAG, "Close all channels.");
+
+    for (uint8_t i = 0; i < CONFIG_CONTROLLER_CHANNEL_NUM; i++)
+    {
+        controller_close(i, user_initiated);
+    }
+}
+
+void controller_stop(uint8_t channel_num, bool user_initiated)
 {
     if (channel_num >= CONFIG_CONTROLLER_CHANNEL_NUM)
     {
@@ -97,35 +130,41 @@ void controller_stop(uint8_t channel_num)
         return;
     }
 
-    esp_event_post_to(channels[channel_num].event_loop, CHANNEL_EVENT, CHANNEL_EVENT_STOP, NULL, 0, 0);
+    esp_event_post_to(channels[channel_num].event_loop, CHANNEL_EVENT, CHANNEL_EVENT_STOP, &user_initiated, sizeof(user_initiated), 0);
 }
 
-void controller_open_all()
-{
-    ESP_LOGI(TAG, "Open all channels.");
-
-    for (uint8_t i = 0; i < CONFIG_CONTROLLER_CHANNEL_NUM; i++)
-    {
-        controller_open(i);
-    }
-}
-
-void controller_close_all()
-{
-    ESP_LOGI(TAG, "Close all channels.");
-
-    for (uint8_t i = 0; i < CONFIG_CONTROLLER_CHANNEL_NUM; i++)
-    {
-        controller_close(i);
-    }
-}
-
-void controller_stop_all()
+void controller_stop_all(bool user_initiated)
 {
     ESP_LOGI(TAG, "Stop all channels.");
 
     for (uint8_t i = 0; i < CONFIG_CONTROLLER_CHANNEL_NUM; i++)
     {
-        controller_stop(i);
+        controller_stop(i, user_initiated);
     }
+}
+
+int8_t controller_query(uint8_t channel_num)
+{
+    if (channel_num >= CONFIG_CONTROLLER_CHANNEL_NUM)
+    {
+        ESP_LOGE(TAG, "Tried querying channel %u of %u.", channel_num, CONFIG_CONTROLLER_CHANNEL_NUM);
+        return -1;
+    }
+
+    return channels[channel_num].last_user_event;
+}
+
+int8_t *controller_query_all()
+{
+    ESP_LOGI(TAG, "Query all channels.");
+
+    static int8_t results[CONFIG_CONTROLLER_CHANNEL_NUM + 1];
+    results[CONFIG_CONTROLLER_CHANNEL_NUM] = -1;
+
+    for (uint8_t i = 0; i < CONFIG_CONTROLLER_CHANNEL_NUM; i++)
+    {
+        results[i] = controller_query(i);
+    }
+
+    return results;
 }
